@@ -1,4 +1,4 @@
-# JAG har jobbat som row mayor när allt är column mayor.... TODO: första 2 funkar, multi-funkar ej.
+# JAG har jobbat som row mayor när allt är column mayor.... TODO: AddRoundKey
 
 
 key = "F4C020A0A1F604FD343FAC6A7E6AE0F9"
@@ -102,11 +102,11 @@ def mix_one_column(col):
     return new_column
 
 
-def xor_columns(state, word_matrix):
+def xor_columns(state, key_matrix):
     new_state = [[0 for _ in range(4)] for _ in range(4)]
     for col in range(4):
         for row in range(4):
-            new_state[col][row] = state[col][row] ^ word_matrix[col][row]
+            new_state[col][row] = state[col][row] ^ key_matrix[col][row]
     return new_state
 
 
