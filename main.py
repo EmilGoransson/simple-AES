@@ -1,10 +1,4 @@
-# JAG har jobbat som row mayor när allt är column mayor.... TODO: AddRoundKey
-
-
-key = "F4C020A0A1F604FD343FAC6A7E6AE0F9"
-encrypt = [0xF2, 0x95, 0xB9, 0x31, 0x8B, 0x99, 0x44, 0x34, 0xD9, 0x3D, 0x98, 0xA4, 0xE4, 0x49, 0xAF, 0xD8]
-
-rounds = 10
+import sys
 
 s_box = [0x63, 0x7c, 0x77, 0x7b, 0xf2, 0x6b, 0x6f, 0xc5, 0x30, 0x01, 0x67, 0x2b, 0xfe, 0xd7, 0xab, 0x76,
          0xca, 0x82, 0xc9, 0x7d, 0xfa, 0x59, 0x47, 0xf0, 0xad, 0xd4, 0xa2, 0xaf, 0x9c, 0xa4, 0x72, 0xc0,
@@ -71,10 +65,11 @@ def substitute_bytes(state: list):
 
 
 def print_as_column(state):
-    print("---Print as column---")
+    out = bytearray()
     for col in range(4):
         for row in range(4):
-            print(hex(state[row][col])[2:], end="")
+            out.append(state[row][col])
+    sys.stdout.buffer.write(bytes(out))
 
 
 def shift_rows(state: list):
@@ -86,14 +81,7 @@ def shift_rows(state: list):
     return new_state
 
 
-# based on     mix_columns_matrix = [
-#   [2, 3, 1, 1],
-#   [1, 2, 3, 1],
-#   [1, 1, 2, 3],
-#   [3, 1, 1, 2]
-# ]
 def mix_one_column(col):
-    print("Column IN", col)
     new_column = [0, 0, 0, 0]
     new_column[0] = multi_2_lookup[col[0]] ^ multi_3_lookup[col[1]] ^ col[2] ^ col[3]
     new_column[1] = col[0] ^ multi_2_lookup[col[1]] ^ multi_3_lookup[col[2]] ^ col[3]
@@ -102,17 +90,22 @@ def mix_one_column(col):
     return new_column
 
 
-def xor_columns(state, key_matrix):
+def add_round_key(state, key_words):
     new_state = [[0 for _ in range(4)] for _ in range(4)]
-    for col in range(4):
-        for row in range(4):
-            new_state[col][row] = state[col][row] ^ key_matrix[col][row]
+    key_matrix = [[0 for _ in range(4)] for _ in range(4)]
+
+    for i in range(4):
+        for j in range(4):
+            key_matrix[j][i] = key_words[i][j]
+
+    for row in range(4):
+        for col in range(4):
+            new_state[row][col] = state[row][col] ^ key_matrix[row][col]
+
     return new_state
 
 
 def mix_columns(state: list):
-    # Mix column matrix for AES
-
     new_columns2 = [0 for _ in range(4)]
     reordered_matrix = [[0 for _ in range(4)] for _ in range(4)]
 
@@ -129,50 +122,86 @@ def mix_columns(state: list):
     return reordered_matrix
 
 
-# def r_con():
+def r_con(round):
+    # https://en.wikipedia.org/wiki/AES_key_schedule
+    r_con_values = [
+        0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80, 0x1B, 0x36
+    ]
+    return r_con_values[round - 1]
 
-# def add_round_key():
+
+def rot_word(word):
+    return word[1:] + word[:1]
 
 
-if __name__ == '__main__':
-    # remember that its column mayor (read index 0, 4, 8 , 12 for first word) (use print_as_column to get correct
-    # order output)
-    matrix = [[0 for _ in range(4)] for _ in range(4)]
-    key_in_matrix = [[0 for _ in range(4)] for _ in range(4)]
-    key = "F4C020A0A1F604FD343FAC6A7E6AE0F9"
-    input = "F295B9318B994434D93D98A4E449AFD8"
-    bytes_list = [int(input[i:i + 2], 16) for i in range(0, len(input), 2)]
-    key_as_words = [int(key[i:i + 2], 16) for i in range(0, len(input), 2)]
+def sub_word(word):
+    result = []
+    for i in range(4):
+        byte = word[i]
+        substituted_byte = s_box[byte]
+        result.append(substituted_byte)
+    return result
 
-    print("Key as words: ", key_as_words)
 
-    for i in range(16):
-        col = i // 4
-        row = i % 4
-        matrix[row][col] = bytes_list[i]
-        key_in_matrix[row][col] = key_as_words[i]
+def key_expansion(key_matrix):
+    keys = []
 
-    print("Matrix:")
-    for row in matrix:
-        print(row)
+    for i in range(4):
+        arr = []
+        for j in range(4):
+            arr.append(key_matrix[j][i])
+        keys.append(arr)
 
-    print("---XOR WORDS & BYTES ---")
-    state = xor_columns(matrix, key_in_matrix)
-    print_as_column(state)
+    for i in range(1, 11):
+        derived_key = keys[(i * 4) - 1].copy()
+        derived_key = rot_word(derived_key)
+        derived_key = sub_word(derived_key)
+        r_con_val = r_con(i)
+        derived_key[0] ^= r_con_val
+        # generates next 4 words
+        for j in range(4):
+            new_words = []
+            for byte in range(4):
+                if j == 0:
+                    new_words.append(derived_key[byte] ^ keys[(i - 1) * 4][byte])
+                else:
+                    new_words.append(keys[i * 4 + j - 1][byte] ^ keys[(i - 1) * 4 + j][byte])
+            keys.append(new_words)
 
-    subbed_bytes = substitute_bytes(state)
-    print("subbed bytes check:")
-    for row in subbed_bytes:
-        print(row)
+    return keys
 
-    shifted_rows = shift_rows(subbed_bytes)
-    print("shifted rows check done:")
-    for row in shifted_rows:
-        print(row)
 
-    mixed = mix_columns(shifted_rows)
-    print("mixed_col check done:")
-    for row in mixed:
-        print(row)
-    # hex(7) ger 0x7 inte 0x07, problem?
-    print_as_column(mixed)
+def encrypt_with_aes():
+    key = sys.stdin.buffer.read(16)
+    while inp := sys.stdin.buffer.read(16):
+        matrix = [[0 for _ in range(4)] for _ in range(4)]
+        key_in_matrix = [[0 for _ in range(4)] for _ in range(4)]
+        bytes_list = list(inp)
+        key_as_words = list(key)
+
+        for i in range(16):
+            col = i // 4
+            row = i % 4
+            matrix[row][col] = bytes_list[i]
+            key_in_matrix[row][col] = key_as_words[i]
+
+        # generate init round keys
+        round_keys = key_expansion(key_in_matrix)
+
+        state = add_round_key(matrix, round_keys[0:4])
+
+        # first 9 rounds
+        for round in range(1, 10):
+            state = substitute_bytes(state)
+            state = shift_rows(state)
+            state = mix_columns(state)
+            state = add_round_key(state, round_keys[round * 4:(round + 1) * 4])
+        # last round
+        state = substitute_bytes(state)
+        state = shift_rows(state)
+        state = add_round_key(state, round_keys[40:44])
+        # encrypted
+        print_as_column(state)
+
+
+encrypt_with_aes()
