@@ -1,5 +1,7 @@
 import sys
 
+#sources used: https://en.wikipedia.org/wiki/AES_key_schedule , https://en.wikipedia.org/wiki/Advanced_Encryption_Standard ,https://www.youtube.com/watch?v=0RxLUf4fxs8 , https://legacy.cryptool.org/en/cto/aes-step-by-step , https://www.youtube.com/watch?v=IpuvKyeCrvU&t=537s , https://youtu.be/3MPkc-PFSRI?si=hsJfWz98jn81AGE2
+
 s_box = [0x63, 0x7c, 0x77, 0x7b, 0xf2, 0x6b, 0x6f, 0xc5, 0x30, 0x01, 0x67, 0x2b, 0xfe, 0xd7, 0xab, 0x76,
          0xca, 0x82, 0xc9, 0x7d, 0xfa, 0x59, 0x47, 0xf0, 0xad, 0xd4, 0xa2, 0xaf, 0x9c, 0xa4, 0x72, 0xc0,
          0xb7, 0xfd, 0x93, 0x26, 0x36, 0x3f, 0xf7, 0xcc, 0x34, 0xa5, 0xe5, 0xf1, 0x71, 0xd8, 0x31, 0x15,
@@ -54,14 +56,11 @@ multi_3_lookup = [0x00, 0x03, 0x06, 0x05, 0x0c, 0x0f, 0x0a, 0x09, 0x18, 0x1b, 0x
 
 
 def substitute_bytes(state: list):
-    new_state = [[0 for _ in range(4)] for _ in range(4)]
-
     for i in range(16):
         col = i // 4
         row = i % 4
-        new_state[row][col] = s_box[state[row][col]]
-
-    return new_state
+        state[row][col] = s_box[state[row][col]]
+    return state
 
 
 def print_as_column(state):
@@ -73,12 +72,10 @@ def print_as_column(state):
 
 
 def shift_rows(state: list):
-    new_state = [[], [], [], []]
-    new_state[0] = state[0]
-    new_state[1] = state[1][1:] + state[1][:1]
-    new_state[2] = state[2][2:] + state[2][:2]
-    new_state[3] = state[3][3:] + state[3][:3]
-    return new_state
+    state[1] = state[1][1:] + state[1][:1]
+    state[2] = state[2][2:] + state[2][:2]
+    state[3] = state[3][3:] + state[3][:3]
+    return state
 
 
 def mix_one_column(col):
@@ -91,35 +88,21 @@ def mix_one_column(col):
 
 
 def add_round_key(state, key_words):
-    new_state = [[0 for _ in range(4)] for _ in range(4)]
-    key_matrix = [[0 for _ in range(4)] for _ in range(4)]
-
     for i in range(4):
         for j in range(4):
-            key_matrix[j][i] = key_words[i][j]
-
-    for row in range(4):
-        for col in range(4):
-            new_state[row][col] = state[row][col] ^ key_matrix[row][col]
-
-    return new_state
+            state[j][i] ^= key_words[i][j]
+    return state
 
 
 def mix_columns(state: list):
-    new_columns2 = [0 for _ in range(4)]
-    reordered_matrix = [[0 for _ in range(4)] for _ in range(4)]
-
     for i in range(4):
+        col = []
+        for row in range(4):
+            col.append(state[row][i])
+        mixed_col = mix_one_column(col)
         for j in range(4):
-            reordered_matrix[j][i] = state[i][j]
-
-    for t, col in enumerate(reordered_matrix):
-        new_columns2[t] = mix_one_column(col)
-
-    for i in range(4):
-        for j in range(4):
-            reordered_matrix[i][j] = new_columns2[j][i]
-    return reordered_matrix
+            state[j][i] = mixed_col[j]
+    return state
 
 
 def r_con(round):
@@ -172,21 +155,26 @@ def key_expansion(key_matrix):
 
 
 def encrypt_with_aes():
+    matrix = [[0 for _ in range(4)] for _ in range(4)]
+    key_in_matrix = [[0 for _ in range(4)] for _ in range(4)]
     key = sys.stdin.buffer.read(16)
+    key_as_words = list(key)
+
+    for i in range(16):
+        col = i // 4
+        row = i % 4
+        key_in_matrix[row][col] = key_as_words[i]
+    round_keys = key_expansion(key_in_matrix)
+
     while inp := sys.stdin.buffer.read(16):
-        matrix = [[0 for _ in range(4)] for _ in range(4)]
-        key_in_matrix = [[0 for _ in range(4)] for _ in range(4)]
         bytes_list = list(inp)
-        key_as_words = list(key)
 
         for i in range(16):
             col = i // 4
             row = i % 4
             matrix[row][col] = bytes_list[i]
-            key_in_matrix[row][col] = key_as_words[i]
 
         # generate init round keys
-        round_keys = key_expansion(key_in_matrix)
 
         state = add_round_key(matrix, round_keys[0:4])
 
