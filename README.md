@@ -8,7 +8,7 @@ This is a simplified implementation and is NOT secure for real use. It is vulner
 
 ## Usage
 ```bash
-echo -n "MySixteenByteKey" | cat - mydata.txt | python3 aes_encrypt.py > encrypted.bin
+echo -n "MySixteenByteKey" | cat - mydata.txt | python3 main.py > encrypted.bin
 ```
 
 ## Features
