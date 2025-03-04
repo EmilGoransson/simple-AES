@@ -20,7 +20,7 @@ s_box = [0x63, 0x7c, 0x77, 0x7b, 0xf2, 0x6b, 0x6f, 0xc5, 0x30, 0x01, 0x67, 0x2b,
          0x8c, 0xa1, 0x89, 0x0d, 0xbf, 0xe6, 0x42, 0x68, 0x41, 0x99, 0x2d, 0x0f, 0xb0, 0x54, 0xbb, 0x16
          ]
 
-# Used in order to hide statistical relationship between cipher and plaintext (destroys patterns)
+# Used in order to hide statistical relationship between cipher and plaintext (destroys patterns) (multi by 2 in galois field)
 # https://en.wikipedia.org/wiki/Rijndael_MixColumns
 multi_2_lookup = [0x00, 0x02, 0x04, 0x06, 0x08, 0x0a, 0x0c, 0x0e, 0x10, 0x12, 0x14, 0x16, 0x18, 0x1a, 0x1c, 0x1e,
                   0x20, 0x22, 0x24, 0x26, 0x28, 0x2a, 0x2c, 0x2e, 0x30, 0x32, 0x34, 0x36, 0x38, 0x3a, 0x3c, 0x3e,
@@ -79,7 +79,7 @@ def shift_rows(state: list):
     state[3] = state[3][3:] + state[3][:3]
     return state
 
-#xor matrix transformation using lookup tables  (hides statistical relation between plain and ciphertext)
+#xor matrix transformation using lookup tables  (hides statistical relation between plain and ciphertext), tables r pre computed as they are constant
 def mix_one_column(col):
     new_column = [0, 0, 0, 0]
     new_column[0] = multi_2_lookup[col[0]] ^ multi_3_lookup[col[1]] ^ col[2] ^ col[3]
@@ -136,8 +136,9 @@ def key_expansion(key_matrix):  #we generate all the keys initially from the ini
         for j in range(4):
             arr.append(key_matrix[j][i])
         keys.append(arr)
-# generate remaining keys (10)
+# generate remaining keys (10) which is depoendant on the initial key
     for i in range(1, 11):
+        #get last word from last key
         derived_key = keys[(i * 4) - 1].copy()
         derived_key = rot_word(derived_key)
         derived_key = sub_word(derived_key)
@@ -149,7 +150,7 @@ def key_expansion(key_matrix):  #we generate all the keys initially from the ini
             for byte in range(4):
                 if j == 0: #for the first word  we XOr the "new key" with other words from prev rounds
                     new_words.append(derived_key[byte] ^ keys[(i - 1) * 4][byte])
-                else:# otherwise we XOr with prev words
+                else:# otherwise we XOr with words from prev rounds word
                     new_words.append(keys[i * 4 + j - 1][byte] ^ keys[(i - 1) * 4 + j][byte])
             keys.append(new_words)
 
@@ -161,17 +162,19 @@ def encrypt_with_aes():
     key_in_matrix = [[0 for _ in range(4)] for _ in range(4)]
     key = sys.stdin.buffer.read(16)
     key_as_words = list(key)
-    # read key and in key_matrix and makle it into word-array
+    # read key and in key_matrix and makle it into word-array (transform it into 4x4)
     for i in range(16):
         col = i // 4
         row = i % 4
         key_in_matrix[row][col] = key_as_words[i]
     # generate round_keys using the key expansion
-    round_keys = key_expansion(key_in_matrix)
+    round_keys = key_expansion(key_in_matrix) #before for-loop bc keys will always be the same (for same enc)
 
+    # reads 16bytes as block and process it
     while inp := sys.stdin.buffer.read(16):
         bytes_list = list(inp)
 
+        # as before transform byte into 4x4
         for i in range(16):
             col = i // 4
             row = i % 4
@@ -186,8 +189,8 @@ def encrypt_with_aes():
             state = substitute_bytes(state)
             state = shift_rows(state)
             state = mix_columns(state)
-            state = add_round_key(state, round_keys[round * 4:(round + 1) * 4])
-        # last round
+            state = add_round_key(state, round_keys[round * 4:(round + 1) * 4]) # mix state with roundkey we prev calculated
+        # last round (skip mix-columns, why idk)
         state = substitute_bytes(state)
         state = shift_rows(state)
         state = add_round_key(state, round_keys[40:44])
